@@ -3,11 +3,12 @@ import pandas as pd
 from io import BytesIO
 import requests
 import json
+import time
 
 st.set_page_config(page_title="PharmaSales Tracker Pro", page_icon="💊", layout="wide")
 
 # -----------------------------------------------------------------------------
-# গুগল শিট ও স্ক্রিপ্ট কনফিগারেশন (আপনার আসল লিংক দুটি এখানে বসানো আছে)
+# গুগল শিট ও স্ক্রিপ্ট কনফিগারেশন
 # -----------------------------------------------------------------------------
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtsQjARD1Ig8B0BFSoLaNuLi_Je0lw9vdC52vE_f59Ef6143cAGjPlvFGA/exec"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1rhkmYVHJvYIHIISxUDuURb_NZAQHXvyPhaYFcfPb7c8/export?format=csv"
@@ -22,7 +23,6 @@ DOCTOR_LIST = [
     "S K GHOSH", "P PATRA", "D DOLOI", "A MIDYA", "S SAMANTA", "B DOLOI"
 ]
 
-# আপনার ৪ জন স্টাফের নাম
 STAFF_LIST = ["Sourav", "Susanta", "Sarojit", "New Joining"]
 MONTH_LIST = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"]
 
@@ -31,17 +31,13 @@ st.sidebar.title("🔐 Login Portal")
 user_role = st.sidebar.radio("Select Portal", ["📲 Field Staff Entry", "📊 Manager / Admin Dashboard"])
 
 # -----------------------------------------------------------------------------
-# লাইভ ডেটা পড়ার ফাংশন
+# লাইভ ডেটা পড়ার ফাংশন (ক্লিন ও নো-ক্যাশ)
 # -----------------------------------------------------------------------------
 def get_live_data():
     try:
-       # লাইভ ডেটা পড়ার ফাংশন
-def get_live_data():
-    try:
-        import time
         fresh_url = f"{GOOGLE_SHEET_CSV_URL}&_nocache={int(time.time())}"
         df = pd.read_csv(fresh_url)
-        df.columns = [c.strip() for c in df.columns]
+        df.columns = [str(c).strip() for c in df.columns]
         if "Sale" in df.columns:
             df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
         if "Target" in df.columns:
@@ -49,12 +45,8 @@ def get_live_data():
         return df
     except Exception:
         return pd.DataFrame()
-            df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
-        if "Target" in df.columns:
-            df["Target"] = pd.to_numeric(df["Target"], errors="coerce").fillna(0)
-        return df
-    except Exception:
-        return pd.DataFrame()
+
+df_live = get_live_data()
 
 # -----------------------------------------------------------------------------
 # ১. ফিল্ড স্টাফ এন্ট্রি (ডুপ্লিকেট চেক + রিয়েল স্টাফ নাম)
@@ -73,13 +65,12 @@ if user_role == "📲 Field Staff Entry":
 
     sale = st.number_input("Actual Sale Received (₹)", min_value=0, step=500, value=0)
 
-    # 🔴 ডুপ্লিকেট এন্ট্রি চেকিং লজিক
+    # ডুপ্লিকেট এন্ট্রি চেকিং লজিক
     existing_records = pd.DataFrame()
     if not df_live.empty and "Doctor" in df_live.columns and "Month" in df_live.columns:
-        existing_records = df_live[(df_live["Doctor"].astype(str).str.strip() == doctor) & 
-                                   (df_live["Month"].astype(str).str.strip() == month)]
+        existing_records = df_live[(df_live["Doctor"].astype(str).str.strip().str.upper() == str(doctor).strip().upper()) & 
+                                   (df_live["Month"].astype(str).str.strip().str.upper() == str(month).strip().upper())]
 
-    # ডুপ্লিকেট পেলে সতর্কতা প্রদর্শন
     if not existing_records.empty:
         total_prev_sale = existing_records["Sale"].sum()
         staff_list_prev = ", ".join(existing_records["Staff"].astype(str).unique())
@@ -96,7 +87,7 @@ if user_role == "📲 Field Staff Entry":
             if sale <= 0:
                 st.error("অনুগ্রহ করে বিক্রয়ের টাকা (Sale Received) সঠিকভাবে লিখুন!")
             elif not existing_records.empty and not confirm_duplicate:
-                st.error("⚠️ আপনি ভুল এন্ট্রি রোধ করতে আটকে গেছেন! যদি সত্যি অতিরিক্ত সেলস যোগ করতে চান, তবে উপরের টিক চিহ্ন বক্সে ক্লিক করে তারপর সাবমিট করুন।")
+                st.error("⚠️ ভুল এন্ট্রি রোধ করতে আটকানো হয়েছে! আপনি যদি সত্যি আরও সেলস যোগ করতে চান, তবে উপরের বক্সে টিক চিহ্ন দিয়ে সাবমিট করুন।")
             else:
                 payload = {
                     "staff": staff_name,
@@ -138,12 +129,11 @@ else:
                     "Staff": lambda x: ", ".join(x.unique())
                 }).reset_index()
 
-                # লাখে রূপান্তর
                 df_merged["Business in Lakhs"] = (df_merged["Sale"] / 100000).round(2)
 
                 st.dataframe(df_merged, use_container_width=True)
 
-                # এক্সেল ফাইল ডাউনলোড
+                # এক্সেল ফাইল তৈরি ও ডাউনলোড বাটন
                 buf = BytesIO()
                 with pd.ExcelWriter(buf, engine="openpyxl") as writer:
                     df_merged.to_excel(writer, index=False, sheet_name="Master_Report")
