@@ -35,14 +35,20 @@ user_role = st.sidebar.radio("Select Portal", ["📲 Field Staff Entry", "📊 M
 # -----------------------------------------------------------------------------
 def get_live_data():
     try:
-        df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-        df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
-        df["Target"] = pd.to_numeric(df["Target"], errors="coerce").fillna(0)
+       # লাইভ ডেটা পড়ার ফাংশন
+def get_live_data():
+    try:
+        import time
+        fresh_url = f"{GOOGLE_SHEET_CSV_URL}&_nocache={int(time.time())}"
+        df = pd.read_csv(fresh_url)
+        df.columns = [c.strip() for c in df.columns]
+        if "Sale" in df.columns:
+            df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
+        if "Target" in df.columns:
+            df["Target"] = pd.to_numeric(df["Target"], errors="coerce").fillna(0)
         return df
     except Exception:
-        return pd.DataFrame(columns=["Timestamp", "Staff", "Month", "Doctor", "Target", "Sale"])
-
-df_live = get_live_data()
+        return pd.DataFrame()
 
 # -----------------------------------------------------------------------------
 # ১. ফিল্ড স্টাফ এন্ট্রি (ডুপ্লিকেট চেক + রিয়েল স্টাফ নাম)
