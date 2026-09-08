@@ -49,6 +49,12 @@ def get_live_data():
         return df
     except Exception:
         return pd.DataFrame()
+            df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
+        if "Target" in df.columns:
+            df["Target"] = pd.to_numeric(df["Target"], errors="coerce").fillna(0)
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 # -----------------------------------------------------------------------------
 # ১. ফিল্ড স্টাফ এন্ট্রি (ডুপ্লিকেট চেক + রিয়েল স্টাফ নাম)
