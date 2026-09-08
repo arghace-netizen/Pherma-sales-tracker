@@ -49,7 +49,7 @@ def get_live_data():
 df_live = get_live_data()
 
 # -----------------------------------------------------------------------------
-# ১. ফিল্ড স্টাফ এন্ট্রি (ডুপ্লিকেট চেক + রিয়েল স্টাফ নাম)
+# ১. ফিল্ড স্টাফ এন্ট্রি + নিজস্ব এন্ট্রি ভিউ টেবিল
 # -----------------------------------------------------------------------------
 if user_role == "📲 Field Staff Entry":
     st.title("📲 Field Staff Sales Entry")
@@ -87,7 +87,7 @@ if user_role == "📲 Field Staff Entry":
             if sale <= 0:
                 st.error("অনুগ্রহ করে বিক্রয়ের টাকা (Sale Received) সঠিকভাবে লিখুন!")
             elif not existing_records.empty and not confirm_duplicate:
-                st.error("⚠️ ভুল এন্ট্রি রোধ করতে আটকানো হয়েছে! আপনি যদি সত্যি আরও সেলস যোগ করতে চান, তবে উপরের বক্সে টিক চিহ্ন দিয়ে সাবমিট করুন।")
+                st.error("⚠️ আপনি নিশ্চিত না করে সাবমিট করতে পারবেন না। অতিরিক্ত সেলস দিতে চাইলে উপরের বক্সে টিক চিহ্ন দিন।")
             else:
                 payload = {
                     "staff": staff_name,
@@ -99,11 +99,31 @@ if user_role == "📲 Field Staff Entry":
                 try:
                     res = requests.post(APPS_SCRIPT_URL, data=json.dumps(payload), timeout=15)
                     if res.status_code == 200:
-                        st.success(f"✅ সফলভাবে সেভ হয়েছে: {doctor} - ₹{sale:,} (স্টাফ: {staff_name})")
+                        st.success(f"✅ সফলভাবে সেভ হয়েছে: {doctor} - ₹{sale:,} ({staff_name})")
+                        time.sleep(1)
+                        st.rerun()
                     else:
                         st.warning("তথ্য পাঠানো হয়েছে, তবে সার্ভার রেসপন্স চেক করুন।")
                 except Exception as e:
                     st.error(f"সংযোগ ত্রুটি: {e}")
+
+    # --- স্টাফের নিজস্ব এন্ট্রি ক্রস-চেক করার লাইভ টেবিল ---
+    st.divider()
+    st.subheader(f"📋 {staff_name}-এর জমা দেওয়া এন্ট্রি তালিকা ({month} মাস)")
+
+    if not df_live.empty and "Staff" in df_live.columns and "Month" in df_live.columns:
+        my_entries = df_live[(df_live["Staff"].astype(str).str.strip() == staff_name) & 
+                             (df_live["Month"].astype(str).str.strip() == month)]
+
+        if not my_entries.empty:
+            display_cols = [c for c in ["Doctor", "Target", "Sale", "Timestamp"] if c in my_entries.columns]
+            st.dataframe(my_entries[display_cols], use_container_width=True)
+            total_my_sale = my_entries["Sale"].sum()
+            st.info(f"💰 {month} মাসে আপনার মোট জমা করা সেলস: **₹{total_my_sale:,.0f}** (মোট ডাক্তার: **{len(my_entries)}** জন)")
+        else:
+            st.caption(f"{month} মাসে আপনার নামে এখনও কোনো এন্ট্রি জমা পড়েনি।")
+    else:
+        st.caption("এখনও কোনো সেলস ডেটা জমা পড়েনি।")
 
 # -------------------------------------------------------------
 # ২. ম্যানেজার ড্যাশবোর্ড (অটো-মার্জিং ও মাস্টার এক্সেল ডাউনলোড)
@@ -133,7 +153,6 @@ else:
 
                 st.dataframe(df_merged, use_container_width=True)
 
-                # এক্সেল ফাইল তৈরি ও ডাউনলোড বাটন
                 buf = BytesIO()
                 with pd.ExcelWriter(buf, engine="openpyxl") as writer:
                     df_merged.to_excel(writer, index=False, sheet_name="Master_Report")
