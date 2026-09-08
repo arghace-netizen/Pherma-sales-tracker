@@ -13,6 +13,7 @@ st.set_page_config(page_title="PharmaSales Tracker Pro", page_icon="💊", layou
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtsQjARD1Ig8B0BFSoLaNuLi_Je0lw9vdC52vE_f59Ef6143cAGjPlvFGA/exec"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1rhkmYVHJvYIHIISxUDuURb_NZAQHXvyPhaYFcfPb7c8/export?format=csv"
 
+# ১০০ জন ডাক্তারের ডাটাবেস
 DOCTOR_LIST = [
     "SUMIT PATRA", "P PANDA", "BIDISHA BAIDYA", "K K GUHA", "TIYASA MONDAL",
     "SOURAV DOLOI", "AKASH SEN", "BIDYUT BANERJEE", "BARUN MANDI", "BANAMALI SAMANTA",
@@ -29,7 +30,7 @@ st.sidebar.title("🔐 Login Portal")
 user_role = st.sidebar.radio("Select Portal", ["📲 Field Staff Entry", "📊 Manager / Admin Dashboard"])
 
 # -----------------------------------------------------------------------------
-# লাইভ ডেটা পড়ার ফাংশন
+# লাইভ ডেটা পড়ার ফাংশন (ক্লিন ও নো-ক্যাশ)
 # -----------------------------------------------------------------------------
 def get_live_data():
     try:
@@ -47,11 +48,10 @@ def get_live_data():
 df_live = get_live_data()
 
 # -----------------------------------------------------------------------------
-# ১. ফিল্ড স্টাফ এন্ট্রি
+# ১. ফিল্ড স্টাফ এন্ট্রি + লাইভ রিপোর্ট টেবিল
 # -----------------------------------------------------------------------------
 if user_role == "📲 Field Staff Entry":
-    st.title("📲 Field Staff Sales Entry")
-    st.write("সহজে ডাক্তারের নাম ও সেলস সিলেক্ট করে সাবমিট করুন:")
+    st.title("📲 Field Staff Sales Entry & Live Status")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -63,7 +63,7 @@ if user_role == "📲 Field Staff Entry":
 
     sale = st.number_input("Actual Sale Received (₹)", min_value=0, step=500, value=0)
 
-    # ডুপ্লিকেট এন্ট্রি চেক
+    # ডুপ্লিকেট এন্ট্রি চেকিং
     existing_records = pd.DataFrame()
     if not df_live.empty and "Doctor" in df_live.columns and "Month" in df_live.columns:
         existing_records = df_live[(df_live["Doctor"].astype(str).str.strip().str.upper() == str(doctor).strip().upper()) & 
@@ -72,7 +72,7 @@ if user_role == "📲 Field Staff Entry":
     if not existing_records.empty:
         total_prev = existing_records["Sale"].sum()
         staff_prev = ", ".join(existing_records["Staff"].astype(str).unique())
-        st.warning(f"⚠️ **সতর্কতা:** এই ডাক্তারের ({doctor}) নামে **{month}** মাসে ইতিমধ্যে **₹{total_prev:,.0f}** এন্ট্রি করা আছে (স্টাফ: {staff_prev})।")
+        st.warning(f"⚠️ **সতর্কতা:** এই ডাক্তারের ({doctor}) নামে **{month}** মাসে ইতিমধ্যে **₹{total_prev:,.0f}** সেলস এন্ট্রি জমা আছে (স্টাফ: {staff_prev})।")
 
     with st.form("staff_entry_form", clear_on_submit=True):
         confirm_duplicate = False
@@ -95,7 +95,6 @@ if user_role == "📲 Field Staff Entry":
                     "sale": sale
                 }
                 try:
-                    # allow_redirects=True যুক্ত করা হলো গুগল স্ক্রিপ্টের জন্য
                     res = requests.post(
                         APPS_SCRIPT_URL, 
                         data=json.dumps(payload), 
@@ -109,22 +108,43 @@ if user_role == "📲 Field Staff Entry":
                 except Exception as e:
                     st.error(f"সংযোগ সমস্যা: {e}")
 
-    # ফিল্ড স্টাফের নিজস্ব এন্ট্রি দেখার টেবিল
+    # -------------------------------------------------------------
+    # ফিল্ড স্টাফের লাইভ টেবিল (কোন কোন ডাক্তারের সেলস জমা পড়েছে)
+    # -------------------------------------------------------------
     st.divider()
-    st.subheader(f"📋 {staff_name}-এর জমা দেওয়া এন্ট্রি তালিকা ({month} মাস)")
+    st.subheader(f"📋 {month} মাসে জমা পড়া ডাক্তারদের সেলস রিপোর্ট")
 
-    if not df_live.empty and "Staff" in df_live.columns and "Month" in df_live.columns:
-        my_entries = df_live[(df_live["Staff"].astype(str).str.strip().str.upper() == staff_name.strip().upper()) & 
-                             (df_live["Month"].astype(str).str.strip().str.upper() == month.strip().upper())]
+    # ফিল্টার অপশন: শুধু নিজেরটা দেখবে নাকি টিমের সবারটা দেখবে
+    view_scope = st.radio(
+        "কোন রিপোর্টটি দেখতে চান?",
+        [f"আমার নিজের এন্ট্রি ({staff_name})", "সব ফিল্ড স্টাফদের সম্মিলিত এন্ট্রি"],
+        horizontal=True
+    )
 
-        if not my_entries.empty:
-            cols = [c for c in ["Doctor", "Target", "Sale", "Timestamp"] if c in my_entries.columns]
-            st.dataframe(my_entries[cols], use_container_width=True)
-            st.info(f"💰 {month} মাসে আপনার মোট সেলস: **₹{my_entries['Sale'].sum():,.0f}**")
+    if not df_live.empty and "Month" in df_live.columns:
+        if view_scope == f"আমার নিজের এন্ট্রি ({staff_name})":
+            display_df = df_live[(df_live["Staff"].astype(str).str.strip().str.upper() == staff_name.strip().upper()) & 
+                                 (df_live["Month"].astype(str).str.strip().str.upper() == month.strip().upper())]
         else:
-            st.caption(f"{month} মাসে আপনার নামে এখনও কোনো এন্ট্রি জমা পড়েনি।")
+            display_df = df_live[df_live["Month"].astype(str).str.strip().str.upper() == month.strip().upper()]
+
+        if not display_df.empty:
+            cols = [c for c in ["Doctor", "Sale", "Target", "Staff", "Timestamp"] if c in display_df.columns]
+            
+            # টেবিল ডিসপ্লে
+            st.dataframe(
+                display_df[cols].reset_index(drop=True), 
+                use_container_width=True,
+                height=300
+            )
+
+            total_val = display_df["Sale"].sum()
+            total_drs = display_df["Doctor"].nunique()
+            st.info(f"📊 মোট জমা হওয়া সেলস: **₹{total_val:,.0f}** | মোট ডাক্তার কভার হয়েছে: **{total_drs}** জন")
+        else:
+            st.caption(f"ℹ️ {month} মাসে এখনও কোনো সেলস রিপোর্ট জমা পড়েনি।")
     else:
-        st.caption("এখনও কোনো সেলস ডেটা জমা পড়েনি।")
+        st.caption("ℹ️ ডেটাবেস থেকে ডেটা লোড হচ্ছে অথবা এখনও কোনো এন্ট্রি জমা পড়েনি।")
 
 # -------------------------------------------------------------
 # ২. ম্যানেজার ড্যাশবোর্ড
