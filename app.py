@@ -13,7 +13,6 @@ st.set_page_config(page_title="PharmaSales Tracker Pro", page_icon="💊", layou
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtsQjARD1Ig8B0BFSoLaNuLi_Je0lw9vdC52vE_f59Ef6143cAGjPlvFGA/exec"
 GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1rhkmYVHJvYIHIISxUDuURb_NZAQHXvyPhaYFcfPb7c8/export?format=csv"
 
-# ১০০ জন ডাক্তারের ডাটাবেস
 DOCTOR_LIST = [
     "SUMIT PATRA", "P PANDA", "BIDISHA BAIDYA", "K K GUHA", "TIYASA MONDAL",
     "SOURAV DOLOI", "AKASH SEN", "BIDYUT BANERJEE", "BARUN MANDI", "BANAMALI SAMANTA",
@@ -26,16 +25,15 @@ DOCTOR_LIST = [
 STAFF_LIST = ["Sourav", "Susanta", "Sarojit", "New Joining"]
 MONTH_LIST = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"]
 
-# সাইডবার পোর্টাল
 st.sidebar.title("🔐 Login Portal")
 user_role = st.sidebar.radio("Select Portal", ["📲 Field Staff Entry", "📊 Manager / Admin Dashboard"])
 
 # -----------------------------------------------------------------------------
-# লাইভ ডেটা পড়ার ফাংশন (ক্লিন ও নো-ক্যাশ)
+# লাইভ ডেটা পড়ার ফাংশন
 # -----------------------------------------------------------------------------
 def get_live_data():
     try:
-        fresh_url = f"{GOOGLE_SHEET_CSV_URL}&_nocache={int(time.time())}"
+        fresh_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
         df = pd.read_csv(fresh_url)
         df.columns = [str(c).strip() for c in df.columns]
         if "Sale" in df.columns:
@@ -49,7 +47,7 @@ def get_live_data():
 df_live = get_live_data()
 
 # -----------------------------------------------------------------------------
-# ১. ফিল্ড স্টাফ এন্ট্রি + নিজস্ব এন্ট্রি ভিউ টেবিল
+# ১. ফিল্ড স্টাফ এন্ট্রি
 # -----------------------------------------------------------------------------
 if user_role == "📲 Field Staff Entry":
     st.title("📲 Field Staff Sales Entry")
@@ -65,16 +63,16 @@ if user_role == "📲 Field Staff Entry":
 
     sale = st.number_input("Actual Sale Received (₹)", min_value=0, step=500, value=0)
 
-    # ডুপ্লিকেট এন্ট্রি চেকিং লজিক
+    # ডুপ্লিকেট এন্ট্রি চেক
     existing_records = pd.DataFrame()
     if not df_live.empty and "Doctor" in df_live.columns and "Month" in df_live.columns:
         existing_records = df_live[(df_live["Doctor"].astype(str).str.strip().str.upper() == str(doctor).strip().upper()) & 
                                    (df_live["Month"].astype(str).str.strip().str.upper() == str(month).strip().upper())]
 
     if not existing_records.empty:
-        total_prev_sale = existing_records["Sale"].sum()
-        staff_list_prev = ", ".join(existing_records["Staff"].astype(str).unique())
-        st.warning(f"⚠️ **সতর্কতা:** এই ডাক্তারের ({doctor}) নামে **{month}** মাসে ইতিমধ্যে **₹{total_prev_sale:,.0f}** সেলস এন্ট্রি করা আছে (আগের এন্ট্রি করেছেন: {staff_list_prev})।")
+        total_prev = existing_records["Sale"].sum()
+        staff_prev = ", ".join(existing_records["Staff"].astype(str).unique())
+        st.warning(f"⚠️ **সতর্কতা:** এই ডাক্তারের ({doctor}) নামে **{month}** মাসে ইতিমধ্যে **₹{total_prev:,.0f}** এন্ট্রি করা আছে (স্টাফ: {staff_prev})।")
 
     with st.form("staff_entry_form", clear_on_submit=True):
         confirm_duplicate = False
@@ -87,7 +85,7 @@ if user_role == "📲 Field Staff Entry":
             if sale <= 0:
                 st.error("অনুগ্রহ করে বিক্রয়ের টাকা (Sale Received) সঠিকভাবে লিখুন!")
             elif not existing_records.empty and not confirm_duplicate:
-                st.error("⚠️ আপনি নিশ্চিত না করে সাবমিট করতে পারবেন না। অতিরিক্ত সেলস দিতে চাইলে উপরের বক্সে টিক চিহ্ন দিন।")
+                st.error("⚠️ অতিরিক্ত সেলস দিতে চাইলে উপরের বক্সে টিক চিহ্ন দিয়ে সাবমিট করুন।")
             else:
                 payload = {
                     "staff": staff_name,
@@ -97,36 +95,39 @@ if user_role == "📲 Field Staff Entry":
                     "sale": sale
                 }
                 try:
-                    res = requests.post(APPS_SCRIPT_URL, data=json.dumps(payload), timeout=15)
-                    if res.status_code == 200:
-                        st.success(f"✅ সফলভাবে সেভ হয়েছে: {doctor} - ₹{sale:,} ({staff_name})")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.warning("তথ্য পাঠানো হয়েছে, তবে সার্ভার রেসপন্স চেক করুন।")
+                    # allow_redirects=True যুক্ত করা হলো গুগল স্ক্রিপ্টের জন্য
+                    res = requests.post(
+                        APPS_SCRIPT_URL, 
+                        data=json.dumps(payload), 
+                        headers={"Content-Type": "application/json"},
+                        allow_redirects=True, 
+                        timeout=15
+                    )
+                    st.success(f"✅ সফলভাবে সংরক্ষিত হয়েছে: {doctor} - ₹{sale:,} ({staff_name})")
+                    time.sleep(1.5)
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"সংযোগ ত্রুটি: {e}")
+                    st.error(f"সংযোগ সমস্যা: {e}")
 
-    # --- স্টাফের নিজস্ব এন্ট্রি ক্রস-চেক করার লাইভ টেবিল ---
+    # ফিল্ড স্টাফের নিজস্ব এন্ট্রি দেখার টেবিল
     st.divider()
     st.subheader(f"📋 {staff_name}-এর জমা দেওয়া এন্ট্রি তালিকা ({month} মাস)")
 
     if not df_live.empty and "Staff" in df_live.columns and "Month" in df_live.columns:
-        my_entries = df_live[(df_live["Staff"].astype(str).str.strip() == staff_name) & 
-                             (df_live["Month"].astype(str).str.strip() == month)]
+        my_entries = df_live[(df_live["Staff"].astype(str).str.strip().str.upper() == staff_name.strip().upper()) & 
+                             (df_live["Month"].astype(str).str.strip().str.upper() == month.strip().upper())]
 
         if not my_entries.empty:
-            display_cols = [c for c in ["Doctor", "Target", "Sale", "Timestamp"] if c in my_entries.columns]
-            st.dataframe(my_entries[display_cols], use_container_width=True)
-            total_my_sale = my_entries["Sale"].sum()
-            st.info(f"💰 {month} মাসে আপনার মোট জমা করা সেলস: **₹{total_my_sale:,.0f}** (মোট ডাক্তার: **{len(my_entries)}** জন)")
+            cols = [c for c in ["Doctor", "Target", "Sale", "Timestamp"] if c in my_entries.columns]
+            st.dataframe(my_entries[cols], use_container_width=True)
+            st.info(f"💰 {month} মাসে আপনার মোট সেলস: **₹{my_entries['Sale'].sum():,.0f}**")
         else:
             st.caption(f"{month} মাসে আপনার নামে এখনও কোনো এন্ট্রি জমা পড়েনি।")
     else:
         st.caption("এখনও কোনো সেলস ডেটা জমা পড়েনি।")
 
 # -------------------------------------------------------------
-# ২. ম্যানেজার ড্যাশবোর্ড (অটো-মার্জিং ও মাস্টার এক্সেল ডাউনলোড)
+# ২. ম্যানেজার ড্যাশবোর্ড
 # -------------------------------------------------------------
 else:
     st.title("📊 Manager Master Dashboard")
@@ -150,7 +151,6 @@ else:
                 }).reset_index()
 
                 df_merged["Business in Lakhs"] = (df_merged["Sale"] / 100000).round(2)
-
                 st.dataframe(df_merged, use_container_width=True)
 
                 buf = BytesIO()
