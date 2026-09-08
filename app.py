@@ -8,10 +8,10 @@ import time
 st.set_page_config(page_title="PharmaSales Tracker Pro", page_icon="💊", layout="wide")
 
 # -----------------------------------------------------------------------------
-# গুগল শিট ও স্ক্রিপ্ট কনফিগারেশন
+# গুগল শিট ও স্ক্রিপ্ট কনফিগারেশন (সরাসরি আপনার আসল আইডি সহ)
 # -----------------------------------------------------------------------------
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwtsQjARD1Ig8B0BFSoLaNuLi_Je0lw9vdC52vE_f59Ef6143cAGjPlvFGA/exec"
-GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1rhkmYVHJvYIHIISxUDuURb_NZAQHXvyPhaYFcfPb7c8/export?format=csv"
+GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1rhkmYVHJvYIHIISxUDuURb_NZAQHXvyPhaYFcfPb7c8/gviz/tq?tqx=out:csv"
 
 # ১০০ জন ডাক্তারের ডাটাবেস
 DOCTOR_LIST = [
@@ -30,13 +30,13 @@ st.sidebar.title("🔐 Login Portal")
 user_role = st.sidebar.radio("Select Portal", ["📲 Field Staff Entry", "📊 Manager / Admin Dashboard"])
 
 # -----------------------------------------------------------------------------
-# লাইভ ডেটা পড়ার ফাংশন (ক্লিন ও নো-ক্যাশ)
+# লাইভ ডেটা পড়ার ফাংশন (gviz রিয়েল-টাইম ইঞ্জিন)
 # -----------------------------------------------------------------------------
 def get_live_data():
     try:
         fresh_url = f"{GOOGLE_SHEET_CSV_URL}&t={int(time.time())}"
         df = pd.read_csv(fresh_url)
-        df.columns = [str(c).strip() for c in df.columns]
+        df.columns = [str(c).replace('"', '').strip() for c in df.columns]
         if "Sale" in df.columns:
             df["Sale"] = pd.to_numeric(df["Sale"], errors="coerce").fillna(0)
         if "Target" in df.columns:
@@ -114,7 +114,6 @@ if user_role == "📲 Field Staff Entry":
     st.divider()
     st.subheader(f"📋 {month} মাসে জমা পড়া ডাক্তারদের সেলস রিপোর্ট")
 
-    # ফিল্টার অপশন: শুধু নিজেরটা দেখবে নাকি টিমের সবারটা দেখবে
     view_scope = st.radio(
         "কোন রিপোর্টটি দেখতে চান?",
         [f"আমার নিজের এন্ট্রি ({staff_name})", "সব ফিল্ড স্টাফদের সম্মিলিত এন্ট্রি"],
@@ -130,8 +129,6 @@ if user_role == "📲 Field Staff Entry":
 
         if not display_df.empty:
             cols = [c for c in ["Doctor", "Sale", "Target", "Staff", "Timestamp"] if c in display_df.columns]
-            
-            # টেবিল ডিসপ্লে
             st.dataframe(
                 display_df[cols].reset_index(drop=True), 
                 use_container_width=True,
